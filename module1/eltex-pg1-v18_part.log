@@ -1,0 +1,29 @@
+ls
+echo $HISTSIZE 
+echo $HISTFILESIZE 
+ls -d ~/.*
+export HISTTIMEFORMAT="%F %T "
+history 
+export PROMPT_COMMAND="history -a; history -c; history -r"
+date
+history | tail
+tail ~/.bash_history 
+whoami 
+tail ~/.bash_history 
+DATE=$(date +%Y-%m-%d)
+echo $DATE 
+TIME=$(date +%H:%M:%S)
+echo $TIME
+ls /bin /sbin | grep '[0-9]'
+clear
+DATE_TIME="$DATE $TIME"
+echo $DATE_TIME 
+PS1='\u@\H-$(date +%H:%M)> '
+export PS1='\u@\H-$(date +%H:%M)> ' >> .bashrc 
+bash
+exit
+for month in {01..12}; do mkdir -p ~/$(date +%Y)-$month; done
+ls -d ~/$(date +%Y)-*
+exit
+bash
+exit

@@ -1,0 +1,14 @@
+cd ~
+touch "${USER}_part3.log"
+touch D1/D2/file.txt
+echo "Hello, world! This is a test file." > D1/D2/file.txt
+(cd D1/D2/D3 && ln -s ../file.txt symlink_file.txt && ln ../file.txt hardlink_file.txt)
+ls -li D1/D2/file.txt D1/D2/D3/symlink_file.txt D1/D2/D3/hardlink_file.txt
+mv D1/D2/file.txt D1/
+cat D1/D2/D3/hardlink_file.txt
+cat D1/D2/D3/symlink_file.txt
+rm -rf D1/D2
+find / -type f -size +20M 2>/dev/null > "${USER}_part3_gt50M.log"
+du -h $(cat "${USER}_part3_gt50M.log") 2>/dev/null
+find ~ -type f -mtime -1
+file /boot/initrd.img*
