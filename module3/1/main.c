@@ -1,18 +1,51 @@
-#include <sys/types.h>
-#include <unistd.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/wait.h>
 
-int main(int argc, char **argv) {
-    pid_t pid = fork();
+int isNumeric(const char *str) {
+    char *endptr;
+    strtod(str, &endptr);
+    return (endptr != str && *endptr == '\0');
+}
 
-    if (pid < 0) {
-        fprintf(stderr, "Fork failed\n"); 
+int main(int argc, char *argv[]) {
+    if (argc < 2) {
+        printf("Usage: %s <arg1> <arg2> ...\n", argv[0]);
         return 1;
-    } else if (pid == 0) {
-        
-    } else {
-    
     }
+
+    int n = argc - 1;
+    int parent_count = (n + 1) / 2;
     
+    pid_t pid = fork();
+    
+    if (pid == 0) {
+        int child_count = n - parent_count;
+        for (int i = parent_count; i < n; i++) {
+            if (isNumeric(argv[i])) {
+                double num = strtod(argv[i], NULL);
+                printf("%s: %f, %f\n", argv[i], num, num * 2);
+            } else {
+                printf("%s\n", argv[i]);
+            }
+        }
+        exit(0);
+    } else if (pid > 0) {
+        for (int i = 1; i <= parent_count; i++) {
+            if (isNumeric(argv[i])) {
+                double num = strtod(argv[i], NULL);
+                printf("%s: %f, %f\n", argv[i], num, num * 2);
+            } else {
+                printf("%s\n", argv[i]);
+            }
+        }
+        wait(NULL);
+    } else {
+        perror("Fork failed");
+        return 1;
+    }
+
     return 0;
 }
