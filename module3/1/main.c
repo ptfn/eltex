@@ -1,8 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <unistd.h>
 #include <sys/wait.h>
+#include <math.h>
 
 int isNumeric(const char *str) {
     char *endptr;
@@ -17,13 +17,12 @@ int main(int argc, char *argv[]) {
     }
 
     int n = argc - 1;
-    int parent_count = (n + 1) / 2;
+    int half = n / 2;
     
     pid_t pid = fork();
     
     if (pid == 0) {
-        int child_count = n - parent_count;
-        for (int i = parent_count; i < n; i++) {
+        for (int i = half + 1; i < argc; i++) {
             if (isNumeric(argv[i])) {
                 double num = strtod(argv[i], NULL);
                 printf("%s: %f, %f\n", argv[i], num, num * 2);
@@ -33,7 +32,7 @@ int main(int argc, char *argv[]) {
         }
         exit(0);
     } else if (pid > 0) {
-        for (int i = 1; i <= parent_count; i++) {
+        for (int i = 1; i <= half; i++) {
             if (isNumeric(argv[i])) {
                 double num = strtod(argv[i], NULL);
                 printf("%s: %f, %f\n", argv[i], num, num * 2);
@@ -41,6 +40,7 @@ int main(int argc, char *argv[]) {
                 printf("%s\n", argv[i]);
             }
         }
+        
         wait(NULL);
     } else {
         perror("Fork failed");
