@@ -69,3 +69,4 @@ docs/latex/
 *.lock
 core
 *.core
+*.vim

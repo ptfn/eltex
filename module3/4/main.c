@@ -41,33 +41,54 @@ void execute(Command *cmds, int num_cmds) {
     int pipes[num_cmds-1][2];
     pid_t pids[num_cmds];
     
+    // Создаём все необходимые пайпы
     for (int i = 0; i < num_cmds - 1; i++) {
-        pipe(pipes[i]);
+        if (pipe(pipes[i]) == -1) {
+            perror("pipe");
+            exit(1);
+        }
     }
     
     for (int i = 0; i < num_cmds; i++) {
         pids[i] = fork();
+        if (pids[i] < 0) {
+            perror("fork");
+            exit(1);
+        }
+        
         if (pids[i] == 0) {
             if (cmds[i].in_file) {
                 int fd = open(cmds[i].in_file, O_RDONLY);
+                if (fd == -1) {
+                    fprintf(stderr, "Cannot open input file '%s': %s\n",
+                            cmds[i].in_file, strerror(errno));
+                    exit(1);
+                }
                 dup2(fd, STDIN_FILENO);
                 close(fd);
             }
-            else if (i == num_cmds - 1 && cmds[i].out_file) {
+            
+            if (cmds[i].out_file) {
                 int fd = open(cmds[i].out_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                if (fd == -1) {
+                    fprintf(stderr, "Cannot open output file '%s': %s\n",
+                            cmds[i].out_file, strerror(errno));
+                    exit(1);
+                }
                 dup2(fd, STDOUT_FILENO);
                 close(fd);
             }
             
-            if (i > 0) {
+            if (i > 0 && !cmds[i].in_file) {
                 dup2(pipes[i-1][0], STDIN_FILENO);
-                close(pipes[i-1][0]);
-                close(pipes[i-1][1]);
             }
-            if (i < num_cmds - 1) {
+            if (i < num_cmds - 1 && !cmds[i].out_file) {
                 dup2(pipes[i][1], STDOUT_FILENO);
-                close(pipes[i][0]);
-                close(pipes[i][1]);
+            }
+            
+            for (int j = 0; j < num_cmds - 1; j++) {
+                close(pipes[j][0]);
+                close(pipes[j][1]);
             }
             
             execvp(cmds[i].args[0], cmds[i].args);
@@ -80,6 +101,7 @@ void execute(Command *cmds, int num_cmds) {
         close(pipes[i][0]);
         close(pipes[i][1]);
     }
+    
     for (int i = 0; i < num_cmds; i++) {
         waitpid(pids[i], NULL, 0);
     }
@@ -105,7 +127,10 @@ int main() {
         cmd_line = line;
         num_commands = 0;
         while ((cmd_line = strtok(cmd_line, "|")) != NULL && num_commands < MAX_ARGS) {
-            parse_command(cmd_line, &commands[num_commands++]);
+            while (*cmd_line == ' ') cmd_line++;
+            if (*cmd_line != '\0') {
+                parse_command(cmd_line, &commands[num_commands++]);
+            }
             cmd_line = NULL;
         }
         
