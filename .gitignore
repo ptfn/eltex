@@ -15,6 +15,13 @@ a.out
 *.exe
 *.elf
 build/
+
+# module2 binaries
+module2/3/3.1/program
+module2/3/3.2/program
+module2/4/4.3/phonebook
+module2/6/6.3/calculator
+module2/6/6.3/libs/*.so
 Debug/
 Release/
 out/
