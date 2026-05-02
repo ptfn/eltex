@@ -121,7 +121,7 @@ int main() {
             int count = rand() % MAX_NUMBERS + 1;
             shm->count = count;
             for (int i = 0; i < count; i++) {
-                shm->numbers[i] = rand() % 1000;  // числа в диапазоне 0–999
+                shm->numbers[i] = rand() % 1000;
             }
 
             if (sem_post(sem_data) == -1) {
@@ -152,13 +152,13 @@ int main() {
             }
 
             set_count++;
-            printf("Набір %d: min = %d, max = %d (кількість чисел: %d)\n",
+            printf("Kit %d: min = %d, max = %d (numbers: %d)\n",
                    set_count, shm->min, shm->max, shm->count);
         }
 
         waitpid(pid, NULL, 0);
 
-        printf("Оброблено наборів даних: %d\n", set_count);
+        printf("Processed dataset: %d\n", set_count);
 
         munmap(shm, sizeof(shared_data));
         sem_close(sem_data);

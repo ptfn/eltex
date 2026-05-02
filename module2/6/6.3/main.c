@@ -1,12 +1,10 @@
 #include <dirent.h>
 #include <dlfcn.h>
-#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #define MAX_COMMANDS 64
-#define LIB_DIR "./libs"
 
 typedef struct {
     char *name;
@@ -14,22 +12,28 @@ typedef struct {
     void *handle;
 } Command;
 
-int main() {
+int main(int argc, char *argv[]) {
+    const char *lib_dir = (argc > 1) ? argv[1] : "./libs";
+    
     Command commands[MAX_COMMANDS];
     int count = 0;
 
-    DIR *dir = opendir(LIB_DIR);
+    printf("Загрузка плагинов из '%s'...\n", lib_dir);
+
+    DIR *dir = opendir(lib_dir);
     if (!dir) {
-        fprintf(stderr, "Ошибка: не удалось открыть каталог '%s'\n", LIB_DIR);
+        fprintf(stderr, "Ошибка: не удалось открыть каталог '%s'\n", lib_dir);
         return 1;
     }
 
     struct dirent *entry;
     while ((entry = readdir(dir)) != NULL && count < MAX_COMMANDS) {
-        if (!strstr(entry->d_name, ".so")) continue;
+        if (entry->d_name[0] == '.') continue;
+        char *ext = strrchr(entry->d_name, '.');
+        if (!ext || strcmp(ext, ".so") != 0) continue;
 
         char path[512];
-        snprintf(path, sizeof(path), "%s/%s", LIB_DIR, entry->d_name);
+        snprintf(path, sizeof(path), "%s/%s", lib_dir, entry->d_name);
 
         void *handle = dlopen(path, RTLD_LAZY);
         if (!handle) {
@@ -49,6 +53,7 @@ int main() {
         commands[count].name = strdup(getName());
         commands[count].func = execFunc;
         commands[count].handle = handle;
+        printf("Загружен: %s\n", commands[count].name);
         count++;
     }
     closedir(dir);
@@ -58,49 +63,51 @@ int main() {
         return 1;
     }
 
+    printf("Всего загружено операций: %d\n", count);
+
     int choice;
     double a, b, result;
 
     while (1) {
-        printf("\n--- Калькулятор (динамический) ---\n");
+        printf("\n--- Калькулятор ---\n");
         for (int i = 0; i < count; i++) {
             printf("%d. %s\n", i + 1, commands[i].name);
         }
         printf("0. Выход\n");
         printf("Выберите действие: ");
 
-        if (scanf("%d", &choice) != 1) {
-            printf("Ошибка ввода. Попробуйте снова.\n");
-            while (getchar() != '\n');
+if (scanf("%d", &choice) != 1) {
+            printf("Ошибка ввода.\n");
+            int ch;
+            while ((ch = getchar()) != '\n' && ch != EOF);
             continue;
         }
 
-        if (choice == 0) {
-            printf("До свидания!\n");
-            break;
-        }
+        if (choice == 0) break;
 
         if (choice < 1 || choice > count) {
-            printf("Неверный выбор. Попробуйте снова.\n");
+            printf("Неверный выбор.\n");
             continue;
         }
 
         printf("Введите два числа: ");
         if (scanf("%lf %lf", &a, &b) != 2) {
-            printf("Ошибка ввода. Попробуйте снова.\n");
-            while (getchar() != '\n');
+            printf("Ошибка ввода.\n");
+            int ch;
+            while ((ch = getchar()) != '\n' && ch != EOF);
             continue;
         }
 
         result = commands[choice - 1].func(a, b);
-
-        if (isnan(result)) {
-            printf("Ошибка: некорректная операция!\n");
+        
+        if (result != result) {  // NaN check
+            printf("Ошибка: некорректная операция (деление на 0?)\n");
         } else {
-            printf("Результат: %.2lf\n", result);
+            printf("%.2lf %s %.2lf = %.2lf\n", a, commands[choice - 1].name, b, result);
         }
     }
 
+    printf("Освобождение библиотек...\n");
     for (int i = 0; i < count; i++) {
         free(commands[i].name);
         dlclose(commands[i].handle);

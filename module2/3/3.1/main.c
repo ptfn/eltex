@@ -1,3 +1,4 @@
+#include <locale.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -6,309 +7,192 @@
 
 #define PERM_MASK 0777
 
-int parse_numeric_perms(const char *str, mode_t *mode) {
-  char *endptr;
-  long val = strtol(str, &endptr, 8);
-  if (*endptr != '\0' || val < 0 || val > 0777) return -1;
-  *mode = (mode_t)val;
-  return 0;
+void print_perms(mode_t mode) {
+    char sym[10], num[5], bin[10];
+    
+    // Symbolic
+    sym[0] = (mode & S_IRUSR) ? 'r' : '-';
+    sym[1] = (mode & S_IWUSR) ? 'w' : '-';
+    sym[2] = (mode & S_IXUSR) ? 'x' : '-';
+    sym[3] = (mode & S_IRGRP) ? 'r' : '-';
+    sym[4] = (mode & S_IWGRP) ? 'w' : '-';
+    sym[5] = (mode & S_IXGRP) ? 'x' : '-';
+    sym[6] = (mode & S_IROTH) ? 'r' : '-';
+    sym[7] = (mode & S_IWOTH) ? 'w' : '-';
+    sym[8] = (mode & S_IXOTH) ? 'x' : '-';
+    sym[9] = '\0';
+    
+    // Numeric
+    snprintf(num, sizeof(num), "%03o", mode & PERM_MASK);
+    
+    // Binary
+    unsigned int m = mode & PERM_MASK;
+    for (int i = 8; i >= 0; i--)
+        bin[8 - i] = (m & (1 << i)) ? '1' : '0';
+    bin[9] = '\0';
+    
+    printf("  Символьное: %s\n", sym);
+    printf("  Цифровое:   %s\n", num);
+    printf("  Битовое:    %s\n", bin);
 }
 
-int parse_symbolic_perms(const char *str, mode_t *mode) {
-  if (strlen(str) != 9) return -1;
-  mode_t m = 0;
-
-  if (str[0] == 'r')
-    m |= S_IRUSR;
-  else if (str[0] != '-')
-    return -1;
-  if (str[1] == 'w')
-    m |= S_IWUSR;
-  else if (str[1] != '-')
-    return -1;
-  if (str[2] == 'x')
-    m |= S_IXUSR;
-  else if (str[2] != '-')
-    return -1;
-
-  if (str[3] == 'r')
-    m |= S_IRGRP;
-  else if (str[3] != '-')
-    return -1;
-  if (str[4] == 'w')
-    m |= S_IWGRP;
-  else if (str[4] != '-')
-    return -1;
-  if (str[5] == 'x')
-    m |= S_IXGRP;
-  else if (str[5] != '-')
-    return -1;
-
-  if (str[6] == 'r')
-    m |= S_IROTH;
-  else if (str[6] != '-')
-    return -1;
-  if (str[7] == 'w')
-    m |= S_IWOTH;
-  else if (str[7] != '-')
-    return -1;
-  if (str[8] == 'x')
-    m |= S_IXOTH;
-  else if (str[8] != '-')
-    return -1;
-  *mode = m;
-  return 0;
-}
-
-char *format_symbolic_perms(mode_t mode, char *buf, size_t size) {
-  if (size < 10) {
-    if (size > 0) *buf = '\0';
-    return buf;
-  }
-  mode &= PERM_MASK;
-  buf[0] = (mode & S_IRUSR) ? 'r' : '-';
-  buf[1] = (mode & S_IWUSR) ? 'w' : '-';
-  buf[2] = (mode & S_IXUSR) ? 'x' : '-';
-  buf[3] = (mode & S_IRGRP) ? 'r' : '-';
-  buf[4] = (mode & S_IWGRP) ? 'w' : '-';
-  buf[5] = (mode & S_IXGRP) ? 'x' : '-';
-  buf[6] = (mode & S_IROTH) ? 'r' : '-';
-  buf[7] = (mode & S_IWOTH) ? 'w' : '-';
-  buf[8] = (mode & S_IXOTH) ? 'x' : '-';
-  buf[9] = '\0';
-  return buf;
-}
-
-char *format_numeric_perms(mode_t mode, char *buf, size_t size) {
-  snprintf(buf, size, "%03o", (unsigned int)(mode & PERM_MASK));
-  return buf;
-}
-
-char *format_binary_perms(mode_t mode, char *buf, size_t size) {
-  if (size < 10) {
-    if (size > 0) *buf = '\0';
-    return buf;
-  }
-  unsigned int m = (unsigned int)(mode & PERM_MASK);
-  for (int i = 8; i >= 0; --i) {
-    buf[8 - i] = (m & (1 << i)) ? '1' : '0';
-  }
-  buf[9] = '\0';
-  return buf;
-}
-
-static mode_t apply_one_mod(mode_t current, const char *mod) {
-  if (strlen(mod) < 3) return current;
-
-  char who = mod[0];
-  char op = mod[1];
-  const char *perms = mod + 2;
-
-  mode_t class_mask = 0;
-  if (who == 'u')
-    class_mask = S_IRWXU;
-  else if (who == 'g')
-    class_mask = S_IRWXG;
-  else if (who == 'o')
-    class_mask = S_IRWXO;
-  else if (who == 'a')
-    class_mask = S_IRWXU | S_IRWXG | S_IRWXO;
-  else
-    return current;
-
-  mode_t bit_mask = 0;
-  for (const char *p = perms; *p; ++p) {
-    switch (*p) {
-      case 'r':
-        bit_mask |= S_IRUSR;
-        break;
-      case 'w':
-        bit_mask |= S_IWUSR;
-        break;
-      case 'x':
-        bit_mask |= S_IXUSR;
-        break;
-      default:
-        return current;
+int parse_perms(const char *s, mode_t *mode) {
+    if (strlen(s) == 9) {  // Symbolic (rwxr-xr-x)
+        *mode = 0;
+        for (int i = 0; i < 9; i++) {
+            if (s[i] != 'r' && s[i] != 'w' && s[i] != 'x' && s[i] != '-')
+                return -1;
+            switch (i) {
+                case 0: if (s[i]=='r') *mode|=S_IRUSR; break;
+                case 1: if (s[i]=='w') *mode|=S_IWUSR; break;
+                case 2: if (s[i]=='x') *mode|=S_IXUSR; break;
+                case 3: if (s[i]=='r') *mode|=S_IRGRP; break;
+                case 4: if (s[i]=='w') *mode|=S_IWGRP; break;
+                case 5: if (s[i]=='x') *mode|=S_IXGRP; break;
+                case 6: if (s[i]=='r') *mode|=S_IROTH; break;
+                case 7: if (s[i]=='w') *mode|=S_IWOTH; break;
+                case 8: if (s[i]=='x') *mode|=S_IXOTH; break;
+            }
+        }
+        return 0;
+    } else if (strlen(s) <= 4) {  // Numeric (755)
+        char *end;
+        long v = strtol(s, &end, 8);
+        if (*end || v < 0 || v > 0777) return -1;
+        *mode = v;
+        return 0;
     }
-  }
+    return -1;
+}
 
-  if (who == 'a') {
-    mode_t expanded = 0;
-    if (bit_mask & S_IRUSR) expanded |= S_IRUSR | S_IRGRP | S_IROTH;
-    if (bit_mask & S_IWUSR) expanded |= S_IWUSR | S_IWGRP | S_IWOTH;
-    if (bit_mask & S_IXUSR) expanded |= S_IXUSR | S_IXGRP | S_IXOTH;
-    bit_mask = expanded;
-  } else {
-    mode_t shifted = 0;
-    if (bit_mask & S_IRUSR) shifted |= (class_mask & S_IRWXU);
-    if (bit_mask & S_IWUSR) shifted |= (class_mask & S_IRWXU) & S_IWUSR;
-    if (bit_mask & S_IXUSR) shifted |= (class_mask & S_IRWXU) & S_IXUSR;
-
-    mode_t new_mask = 0;
-
-    if (who == 'u') {
-      new_mask = bit_mask & S_IRWXU;
-    } else if (who == 'g') {
-      if (bit_mask & S_IRUSR) new_mask |= S_IRGRP;
-      if (bit_mask & S_IWUSR) new_mask |= S_IWGRP;
-      if (bit_mask & S_IXUSR) new_mask |= S_IXGRP;
-    } else if (who == 'o') {
-      if (bit_mask & S_IRUSR) new_mask |= S_IROTH;
-      if (bit_mask & S_IWUSR) new_mask |= S_IWOTH;
-      if (bit_mask & S_IXUSR) new_mask |= S_IXOTH;
+int modify_perms(mode_t cur, const char *mod_str, mode_t *new_mode) {
+    char copy[64];
+    strncpy(copy, mod_str, sizeof(copy) - 1);
+    copy[sizeof(copy) - 1] = '\0';
+    
+    char *tok = strtok(copy, ",");
+    mode_t result = cur;
+    
+    while (tok) {
+        if (strlen(tok) < 3) return -1;
+        
+        char who = tok[0], op = tok[1];
+        const char *p = tok + 2;
+        
+        mode_t bits = 0;
+        for (; *p; p++) {
+            if (*p == 'r') bits |= S_IRUSR;
+            else if (*p == 'w') bits |= S_IWUSR;
+            else if (*p == 'x') bits |= S_IXUSR;
+            else return -1;
+        }
+        
+        // Expand to all classes for 'a'
+        if (who == 'a') {
+            if (bits & S_IRUSR) bits = (bits & ~S_IRUSR) | S_IRUSR|S_IRGRP|S_IROTH;
+            if (bits & S_IWUSR) bits = (bits & ~S_IWUSR) | S_IWUSR|S_IWGRP|S_IWOTH;
+            if (bits & S_IXUSR) bits = (bits & ~S_IXUSR) | S_IXUSR|S_IXGRP|S_IXOTH;
+        }
+        
+        // Map u/g/o to actual bits
+        mode_t mapped = 0;
+        if (who == 'u') {
+            if (bits & S_IRUSR) mapped |= S_IRUSR;
+            if (bits & S_IWUSR) mapped |= S_IWUSR;
+            if (bits & S_IXUSR) mapped |= S_IXUSR;
+        } else if (who == 'g') {
+            if (bits & S_IRUSR) mapped |= S_IRGRP;
+            if (bits & S_IWUSR) mapped |= S_IWGRP;
+            if (bits & S_IXUSR) mapped |= S_IXGRP;
+        } else if (who == 'o') {
+            if (bits & S_IRUSR) mapped |= S_IROTH;
+            if (bits & S_IWUSR) mapped |= S_IWOTH;
+            if (bits & S_IXUSR) mapped |= S_IXOTH;
+        } else {
+            return -1;
+        }
+        
+        if (op == '+') result |= mapped;
+        else if (op == '-') result &= ~mapped;
+        else if (op == '=') { result &= ~(who=='u'?S_IRWXU:who=='g'?S_IRWXG:S_IRWXO); result |= mapped; }
+        else return -1;
+        
+        tok = strtok(NULL, ",");
     }
-    bit_mask = new_mask;
-  }
-
-  mode_t result = current;
-  if (op == '+') {
-    result |= bit_mask;
-  } else if (op == '-') {
-    result &= ~bit_mask;
-  } else if (op == '=') {
-    result &= ~class_mask;
-    result |= bit_mask;
-  } else {
-    return current;
-  }
-  return result;
-}
-
-int apply_modification(mode_t current, const char *mod_str, mode_t *new_mode) {
-  if (mod_str == NULL || *mod_str == '\0') return -1;
-
-  char *mod_copy = strdup(mod_str);
-  if (!mod_copy) return -1;
-
-  mode_t m = current;
-  char *token = strtok(mod_copy, ",");
-  int ok = 1;
-
-  while (token) {
-    mode_t new_m = apply_one_mod(m, token);
-    if (new_m == m && strlen(token) < 3) {
-      ok = 0;
-      break;
-    }
-    m = new_m;
-    token = strtok(NULL, ",");
-  }
-
-  free(mod_copy);
-  if (!ok) return -1;
-  *new_mode = m;
-
-  return 0;
-}
-
-int get_file_perms(const char *filename, mode_t *mode) {
-  struct stat st;
-  if (stat(filename, &st) != 0) return -1;
-  *mode = st.st_mode & PERM_MASK;
-  return 0;
-}
-
-void print_all_representations(mode_t mode) {
-  char sym[10], num[10], bin[10];
-  format_symbolic_perms(mode, sym, sizeof(sym));
-  format_numeric_perms(mode, num, sizeof(num));
-  format_binary_perms(mode, bin, sizeof(bin));
-  printf("  Символьное:   %s\n", sym);
-  printf("  Цифровое:     %s\n", num);
-  printf("  Двоичное:     %s\n", bin);
+    
+    *new_mode = result;
+    return 0;
 }
 
 int main() {
-  setlocale(LC_ALL, "ru_RU.UTF-8");
-  mode_t current_mode = 0;
-  int have_current = 0;
-
-  while (1) {
-    printf("\n=== Меню ===\n");
-    printf(
-        "1. Ввести права (символьные или цифровые) и показать битовое "
-        "представление\n");
-    printf("2. Ввести имя файла и показать его права\n");
-    printf("3. Изменить права (на основе ранее введённых)\n");
-    printf("0. Выход\n");
-    printf("Выберите пункт: ");
-
-    int choice;
-    if (scanf("%d", &choice) != 1) {
-      while (getchar() != '\n')
-        ;
-      continue;
+    setlocale(LC_ALL, "ru_RU.UTF-8");
+    mode_t cur = 0;
+    int active = 0;
+    
+    while (1) {
+        printf("\n=== Меню ===\n");
+        printf("1. Ввести права → показать биты\n");
+        printf("2. Ввести файл → показать все представления\n");
+        printf("3. Изменить права\n");
+        printf("0. Выход\n");
+        printf("Выбор: ");
+        
+        int ch;
+        if (scanf("%d", &ch) != 1) { getchar(); continue; }
+        getchar();
+        
+        if (ch == 0) break;
+        
+        if (ch == 1) {
+            printf("Права (755 или rwxr-xr-x): ");
+            char s[32];
+            if (!fgets(s, sizeof(s), stdin)) continue;
+            s[strcspn(s, "\n")] = '\0';
+            
+            if (parse_perms(s, &cur) == 0) {
+                active = 1;
+                char bin[10];
+                unsigned int m = cur & PERM_MASK;
+                for (int i = 8; i >= 0; i--) bin[8-i] = (m & (1<<i)) ? '1' : '0';
+                bin[9] = '\0';
+                printf("Биты: %s\n", bin);
+            } else {
+                printf("Ошибка: неверный формат\n");
+            }
+        } else if (ch == 2) {
+            printf("Имя файла: ");
+            char name[256];
+            if (!fgets(name, sizeof(name), stdin)) continue;
+            name[strcspn(name, "\n")] = '\0';
+            
+            struct stat st;
+            if (stat(name, &st) == 0) {
+                active = 1;
+                cur = st.st_mode & PERM_MASK;
+                printf("Права файла %s:\n", name);
+                print_perms(cur);
+                printf("\nПроверка: ls -l %s\n", name);
+            } else {
+                perror("Ошибка");
+            }
+        } else if (ch == 3) {
+            if (!active) { printf("Сначала введите права (пункт 1 или 2)\n"); continue; }
+            printf("Текущие:\n");
+            print_perms(cur);
+            
+            printf("Модификация (u+x, g-w, o=rw): ");
+            char mod[64];
+            if (!fgets(mod, sizeof(mod), stdin)) continue;
+            mod[strcspn(mod, "\n")] = '\0';
+            
+            mode_t new_mode;
+            if (modify_perms(cur, mod, &new_mode) == 0) {
+                printf("Новые права:\n");
+                print_perms(new_mode);
+            } else {
+                printf("Ошибка: неверный формат\n");
+            }
+        }
     }
-    getchar();
-
-    if (choice == 0) break;
-
-    if (choice == 1) {
-      printf("Введите права (например, 755 или rwxr-xr-x): ");
-      char input[20];
-      if (!fgets(input, sizeof(input), stdin)) continue;
-      input[strcspn(input, "\n")] = '\0';
-
-      mode_t m;
-      int ok = 0;
-
-      if (parse_numeric_perms(input, &m) == 0) {
-        ok = 1;
-      } else if (parse_symbolic_perms(input, &m) == 0) {
-        ok = 1;
-      } else {
-        printf("Ошибка: неверный формат прав.\n");
-        continue;
-      }
-      if (ok) {
-        current_mode = m;
-        have_current = 1;
-        printf("Битовое представление:\n");
-        char bin[10];
-        format_binary_perms(m, bin, sizeof(bin));
-        printf("  %s\n", bin);
-      }
-    } else if (choice == 2) {
-      printf("Введите имя файла: ");
-      char filename[256];
-      if (!fgets(filename, sizeof(filename), stdin)) continue;
-      filename[strcspn(filename, "\n")] = '\0';
-
-      mode_t m;
-      if (get_file_perms(filename, &m) != 0) {
-        perror("Ошибка stat");
-        continue;
-      }
-      current_mode = m;
-      have_current = 1;
-      printf("Права доступа файла %s:\n", filename);
-      print_all_representations(m);
-
-      printf("\nДля сравнения запустите: ls -l %s\n", filename);
-    } else if (choice == 3) {
-      if (!have_current) {
-        printf("Сначала введите права (пункт 1 или 2).\n");
-        continue;
-      }
-      printf("Текущие права:\n");
-      print_all_representations(current_mode);
-
-      printf("Введите команду модификации (например, u+x, g-w, o=rw): ");
-      char mod[100];
-      if (!fgets(mod, sizeof(mod), stdin)) continue;
-      mod[strcspn(mod, "\n")] = '\0';
-
-      mode_t new_mode;
-      if (apply_modification(current_mode, mod, &new_mode) != 0) {
-        printf("Ошибка: неверная команда модификации.\n");
-        continue;
-      }
-      printf("Новые права:\n");
-      print_all_representations(new_mode);
-    } else {
-      printf("Неверный выбор.\n");
-    }
-  }
-  return 0;
+    return 0;
 }

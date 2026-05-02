@@ -291,6 +291,9 @@ void edit_contact(PhoneBook *pb) {
     edit_field("соцсети", c->social, buffer, MULTI_LEN);
     edit_field("мессенджеры", c->messengers, buffer, MULTI_LEN);
 
+    pb->mod_count++;
+    if (pb->mod_count >= BALANCE_THRESHOLD)
+        balance_tree(pb);
     printf("Контакт обновлён.\n");
 }
 

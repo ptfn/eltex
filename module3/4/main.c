@@ -41,7 +41,7 @@ void execute(Command *cmds, int num_cmds) {
     int pipes[num_cmds-1][2];
     pid_t pids[num_cmds];
     
-    // Создаём все необходимые пайпы
+    // Создаём все пайпы
     for (int i = 0; i < num_cmds - 1; i++) {
         if (pipe(pipes[i]) == -1) {
             perror("pipe");
@@ -56,7 +56,8 @@ void execute(Command *cmds, int num_cmds) {
             exit(1);
         }
         
-        if (pids[i] == 0) {
+        if (pids[i] == 0) {  // Дочерний процесс
+            // --- Настройка ввода ---
             if (cmds[i].in_file) {
                 int fd = open(cmds[i].in_file, O_RDONLY);
                 if (fd == -1) {
@@ -66,8 +67,12 @@ void execute(Command *cmds, int num_cmds) {
                 }
                 dup2(fd, STDIN_FILENO);
                 close(fd);
+            } else if (i > 0) {
+                // Если нет входного файла, берём ввод из предыдущего пайпа
+                dup2(pipes[i-1][0], STDIN_FILENO);
             }
             
+            // --- Настройка вывода ---
             if (cmds[i].out_file) {
                 int fd = open(cmds[i].out_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
                 if (fd == -1) {
@@ -77,31 +82,31 @@ void execute(Command *cmds, int num_cmds) {
                 }
                 dup2(fd, STDOUT_FILENO);
                 close(fd);
-            }
-            
-            if (i > 0 && !cmds[i].in_file) {
-                dup2(pipes[i-1][0], STDIN_FILENO);
-            }
-            if (i < num_cmds - 1 && !cmds[i].out_file) {
+            } else if (i < num_cmds - 1) {
+                // Если нет выходного файла, отправляем вывод в следующий пайп
                 dup2(pipes[i][1], STDOUT_FILENO);
             }
             
+            // --- КРИТИЧЕСКИ ВАЖНО: закрыть ВСЕ дескрипторы пайпов в дочернем процессе ---
             for (int j = 0; j < num_cmds - 1; j++) {
                 close(pipes[j][0]);
                 close(pipes[j][1]);
             }
             
+            // Запуск команды
             execvp(cmds[i].args[0], cmds[i].args);
             fprintf(stderr, "Command not found: %s\n", cmds[i].args[0]);
             exit(1);
         }
     }
     
+    // Родительский процесс закрывает все концы пайпов
     for (int i = 0; i < num_cmds - 1; i++) {
         close(pipes[i][0]);
         close(pipes[i][1]);
     }
     
+    // Ожидаем завершения всех дочерних процессов
     for (int i = 0; i < num_cmds; i++) {
         waitpid(pids[i], NULL, 0);
     }
