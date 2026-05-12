@@ -36,6 +36,7 @@ int main() {
         exit(EXIT_FAILURE);
     }
     
+    setbuf(stdout, NULL);
     printf("Отправитель запущен. Введите сообщения (для завершения введите 'exit'):\n");
     
     while (1) {

@@ -35,9 +35,6 @@ void sigint_handler(int sig) {
 void sem_op(int semid, int sem_num, int op) {
     struct sembuf sb = {sem_num, op, 0};
     if (semop(semid, &sb, 1) == -1) {
-        if (errno == EINTR) {
-            return;
-        }
         perror("semop");
         exit(EXIT_FAILURE);
     }
@@ -87,7 +84,7 @@ int main() {
     struct sigaction sa;
     sa.sa_handler = sigint_handler;
     sigemptyset(&sa.sa_mask);
-    sa.sa_flags = 0;  
+    sa.sa_flags = SA_RESTART;  
     if (sigaction(SIGINT, &sa, NULL) == -1) {
         perror("sigaction");
         exit(EXIT_FAILURE);

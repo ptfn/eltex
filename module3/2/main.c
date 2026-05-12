@@ -60,17 +60,19 @@ int main() {
 
         pid = fork();
         if (pid == 0) {
-            if (execvp(args[0], args) == -1) {
-                fprintf(stderr, "Ошибка: команда '%s' не найдена\n", args[0]);
-                exit(EXIT_FAILURE);
+            char local_path[MAX_LINE];
+            snprintf(local_path, sizeof(local_path), "./%s", args[0]);
+            execvp(local_path, args);
+            if (errno == ENOENT) {
+                execvp(args[0], args);
             }
+            fprintf(stderr, "Ошибка: команда '%s' не найдена\n", args[0]);
+            exit(EXIT_FAILURE);
         } else if (pid > 0) {
             waitpid(pid, &status, 0);
         } else {
             perror("Ошибка fork");
         }
-
-        print_greeting();
     }
 
     printf("До свидания!\n");

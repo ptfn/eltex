@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/wait.h>
-#include <math.h>
+
 
 int isNumeric(const char *str) {
     char *endptr;
@@ -37,7 +37,7 @@ int main(int argc, char *argv[]) {
         exit(0);
     } else if (pid > 0) {
  		outArgs(1, half + 1, argv);
-        //wait(NULL);
+        wait(NULL);
     } else {
         perror("Fork failed");
         return 1;

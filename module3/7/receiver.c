@@ -36,6 +36,7 @@ int main() {
         exit(EXIT_FAILURE);
     }
     
+    setbuf(stdout, NULL);
     printf("Получатель запущен. Ожидание сообщений...\n");
     
     while (1) {

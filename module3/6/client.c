@@ -6,11 +6,10 @@
 #include <sys/msg.h>
 #include <unistd.h>
 #include <errno.h>
-#include <errno.h>
 #include <signal.h>
 
 #define SERVER_PRIORITY 10
-#define MAX_TEXT_SIZE 100
+#define MAX_TEXT_SIZE 256
 
 struct message {
     long mtype;
@@ -25,11 +24,11 @@ int running = 1;
 
 void send_to_server(const char* text) {
     struct message msg;
-    msg.mtype = getpid();
+    msg.mtype = SERVER_PRIORITY;
     strncpy(msg.mtext, text, MAX_TEXT_SIZE);
     msg.client_id = client_id;
     
-    if (msgsnd(msgid, &msg, sizeof(msg.mtext), 0) == -1) {
+    if (msgsnd(msgid, &msg, sizeof(msg) - sizeof(long), 0) == -1) {
         perror("msgsnd");
     }
 }
@@ -37,7 +36,7 @@ void send_to_server(const char* text) {
 void receive_messages() {
     struct message msg;
     
-    if (msgrcv(msgid, &msg, MAX_TEXT_SIZE, client_priority, 0) == -1) {
+    if (msgrcv(msgid, &msg, sizeof(msg) - sizeof(long), client_priority, 0) == -1) {
         if (errno == EINTR) {
             return;
         }
@@ -64,6 +63,7 @@ int main(int argc, char* argv[]) {
     client_id = atoi(argv[1]);
     client_priority = atoi(argv[2]);
     
+    setbuf(stdout, NULL);
     printf("Клиент запущен. ID клиента: %d, Приоритет: %d\n", client_id, client_priority);
     
     key = ftok("/tmp", 'A');
@@ -79,10 +79,14 @@ int main(int argc, char* argv[]) {
     }
     
     char reg_msg[MAX_TEXT_SIZE];
-    snprintf(reg_msg, MAX_TEXT_SIZE, "REGISTER:%d:%d", client_id, client_priority);
+    snprintf(reg_msg, MAX_TEXT_SIZE, "REGISTER:%d:%d:%d", client_id, client_priority, getpid());
     send_to_server(reg_msg);
     
-    signal(SIGINT, handle_sigint);
+    struct sigaction sa;
+    sa.sa_handler = handle_sigint;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_RESTART;
+    sigaction(SIGINT, &sa, NULL);
     
     printf("Клиент зарегистрирован. Введите сообщения для отправки (или 'SHUTDOWN' для выхода):\n");
     

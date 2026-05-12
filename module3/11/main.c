@@ -32,11 +32,12 @@ void sigint_handler(int sig) {
 
 int main() {
     srand(time(NULL) ^ getpid());
+    setbuf(stdout, NULL);
 
     struct sigaction sa;
     sa.sa_handler = sigint_handler;
     sigemptyset(&sa.sa_mask);
-    sa.sa_flags = 0;
+    sa.sa_flags = SA_RESTART;
     sigaction(SIGINT, &sa, NULL);
 
     int shm_fd = shm_open(SHM_NAME, O_CREAT | O_RDWR, 0666);
@@ -129,20 +130,9 @@ int main() {
                 break;
             }
 
-            int ret;
-            do {
-                ret = sem_wait(sem_result);
-            } while (ret == -1 && errno == EINTR && !stop);
-
-            if (ret == -1) {
-                if (errno == EINTR && stop) {
-                    shm->terminate = 1;
-                    sem_post(sem_data);
-                    break;
-                } else {
-                    perror("parent sem_wait result");
-                    break;
-                }
+            if (sem_wait(sem_result) == -1) {
+                perror("parent sem_wait result");
+                break;
             }
 
             if (stop) {

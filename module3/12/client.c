@@ -85,6 +85,7 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
     
+    setbuf(stdout, NULL);
     printf("Connected to server %s:%d. Type 'exit' to quit.\n", server_ip, server_port);
     
     pthread_t recv_tid, send_tid;

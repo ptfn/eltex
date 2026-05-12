@@ -12,9 +12,10 @@
 int main() {
     int sockfd;
     struct sockaddr_in server_addr, client1_addr, client2_addr;
-    socklen_t addr_len = sizeof(struct sockaddr_in);
     char buffer[BUFFER_SIZE];
     int has_client1 = 0, has_client2 = 0;
+    char pending_buf[BUFFER_SIZE];
+    int pending_len = 0;
     
     if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
         perror("socket creation failed");
@@ -35,6 +36,7 @@ int main() {
         exit(EXIT_FAILURE);
     }
     
+    setbuf(stdout, NULL);
     printf("Server listening on port %d...\n", PORT);
     
     while (1) {
@@ -62,6 +64,9 @@ int main() {
         } else if (!has_client2) {
             if (sender_addr.sin_addr.s_addr == client1_addr.sin_addr.s_addr &&
                 sender_addr.sin_port == client1_addr.sin_port) {
+                pending_len = n;
+                if (pending_len > 0)
+                    memcpy(pending_buf, buffer, pending_len);
                 char *msg = "Waiting for client 2 to join...\n";
                 sendto(sockfd, msg, strlen(msg), 0,
                        (struct sockaddr *)&client1_addr, sizeof(client1_addr));
@@ -77,6 +82,17 @@ int main() {
                    (struct sockaddr *)&client1_addr, sizeof(client1_addr));
             sendto(sockfd, msg2, strlen(msg2), 0,
                    (struct sockaddr *)&client2_addr, sizeof(client2_addr));
+            if (pending_len > 0) {
+                printf("Message from client 1 to client 2: %s\n", pending_buf);
+                sendto(sockfd, pending_buf, pending_len, 0,
+                       (struct sockaddr *)&client2_addr, sizeof(client2_addr));
+                pending_len = 0;
+            }
+            if (n > 0) {
+                printf("Message from client 2 to client 1: %s\n", buffer);
+                sendto(sockfd, buffer, n, 0,
+                       (struct sockaddr *)&client1_addr, sizeof(client1_addr));
+            }
         } else {
             struct sockaddr_in *dest_addr;
             if (sender_addr.sin_addr.s_addr == client1_addr.sin_addr.s_addr &&

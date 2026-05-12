@@ -15,24 +15,22 @@ typedef struct {
     char *out_file;
 } Command;
 
-void print_greeting() {
-    printf("Shell v2.0 | ");
-}
-
 void parse_command(char *cmd, Command *cmd_struct) {
     char *token;
+    char *save;
     int i = 0;
     cmd_struct->in_file = cmd_struct->out_file = NULL;
-    
-    while ((token = strtok(cmd, " ")) != NULL && i < MAX_ARGS - 1) {
+
+    token = strtok_r(cmd, " ", &save);
+    while (token != NULL && i < MAX_ARGS - 1) {
         if (strcmp(token, "<") == 0) {
-            cmd_struct->in_file = strtok(NULL, " ");
+            cmd_struct->in_file = strtok_r(NULL, " ", &save);
         } else if (strcmp(token, ">") == 0) {
-            cmd_struct->out_file = strtok(NULL, " ");
+            cmd_struct->out_file = strtok_r(NULL, " ", &save);
         } else {
             cmd_struct->args[i++] = token;
         }
-        cmd = NULL;
+        token = strtok_r(NULL, " ", &save);
     }
     cmd_struct->args[i] = NULL;
 }
@@ -40,24 +38,22 @@ void parse_command(char *cmd, Command *cmd_struct) {
 void execute(Command *cmds, int num_cmds) {
     int pipes[num_cmds-1][2];
     pid_t pids[num_cmds];
-    
-    // Создаём все пайпы
+
     for (int i = 0; i < num_cmds - 1; i++) {
         if (pipe(pipes[i]) == -1) {
             perror("pipe");
             exit(1);
         }
     }
-    
+
     for (int i = 0; i < num_cmds; i++) {
         pids[i] = fork();
         if (pids[i] < 0) {
             perror("fork");
             exit(1);
         }
-        
-        if (pids[i] == 0) {  // Дочерний процесс
-            // --- Настройка ввода ---
+
+        if (pids[i] == 0) {
             if (cmds[i].in_file) {
                 int fd = open(cmds[i].in_file, O_RDONLY);
                 if (fd == -1) {
@@ -68,11 +64,9 @@ void execute(Command *cmds, int num_cmds) {
                 dup2(fd, STDIN_FILENO);
                 close(fd);
             } else if (i > 0) {
-                // Если нет входного файла, берём ввод из предыдущего пайпа
                 dup2(pipes[i-1][0], STDIN_FILENO);
             }
-            
-            // --- Настройка вывода ---
+
             if (cmds[i].out_file) {
                 int fd = open(cmds[i].out_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
                 if (fd == -1) {
@@ -83,30 +77,25 @@ void execute(Command *cmds, int num_cmds) {
                 dup2(fd, STDOUT_FILENO);
                 close(fd);
             } else if (i < num_cmds - 1) {
-                // Если нет выходного файла, отправляем вывод в следующий пайп
                 dup2(pipes[i][1], STDOUT_FILENO);
             }
-            
-            // --- КРИТИЧЕСКИ ВАЖНО: закрыть ВСЕ дескрипторы пайпов в дочернем процессе ---
+
             for (int j = 0; j < num_cmds - 1; j++) {
                 close(pipes[j][0]);
                 close(pipes[j][1]);
             }
-            
-            // Запуск команды
+
             execvp(cmds[i].args[0], cmds[i].args);
             fprintf(stderr, "Command not found: %s\n", cmds[i].args[0]);
             exit(1);
         }
     }
-    
-    // Родительский процесс закрывает все концы пайпов
+
     for (int i = 0; i < num_cmds - 1; i++) {
         close(pipes[i][0]);
         close(pipes[i][1]);
     }
-    
-    // Ожидаем завершения всех дочерних процессов
+
     for (int i = 0; i < num_cmds; i++) {
         waitpid(pids[i], NULL, 0);
     }
@@ -114,38 +103,36 @@ void execute(Command *cmds, int num_cmds) {
 
 int main() {
     char line[MAX_LINE];
-    char *cmd_line;
     Command commands[MAX_ARGS];
     int num_commands;
-    
-    print_greeting();
-    
+
+    printf("Shell v2.0\n");
+
     while (1) {
         printf("> ");
         fflush(stdout);
-        
+
         if (fgets(line, MAX_LINE, stdin) == NULL) break;
         line[strcspn(line, "\n")] = '\0';
-        
+
         if (strcmp(line, "exit") == 0) break;
-        
-        cmd_line = line;
+
         num_commands = 0;
-        while ((cmd_line = strtok(cmd_line, "|")) != NULL && num_commands < MAX_ARGS) {
-            while (*cmd_line == ' ') cmd_line++;
-            if (*cmd_line != '\0') {
-                parse_command(cmd_line, &commands[num_commands++]);
+        char *pipe_save;
+        char *seg = strtok_r(line, "|", &pipe_save);
+        while (seg != NULL && num_commands < MAX_ARGS) {
+            while (*seg == ' ') seg++;
+            if (*seg != '\0') {
+                parse_command(seg, &commands[num_commands++]);
             }
-            cmd_line = NULL;
+            seg = strtok_r(NULL, "|", &pipe_save);
         }
-        
+
         if (num_commands > 0) {
             execute(commands, num_commands);
         }
-        
-        print_greeting();
     }
-    
+
     printf("Goodbye!\n");
     return 0;
 }

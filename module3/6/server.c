@@ -10,7 +10,7 @@
 
 #define SERVER_PRIORITY 10
 #define MAX_CLIENTS 10
-#define MAX_TEXT_SIZE 100
+#define MAX_TEXT_SIZE 256
 
 struct message {
     long mtype;
@@ -30,6 +30,12 @@ int num_clients = 0;
 int running = 1;
 
 void add_client(int pid, int client_id, int priority) {
+    for (int i = 0; i < num_clients; i++) {
+        if (clients[i].client_id == client_id) {
+            printf("Клиент с ID %d уже зарегистрирован\n", client_id);
+            return;
+        }
+    }
     if (num_clients < MAX_CLIENTS) {
         clients[num_clients].pid = pid;
         clients[num_clients].client_id = client_id;
@@ -52,25 +58,25 @@ void remove_client(int pid) {
     }
 }
 
-struct client* find_client(int pid) {
+struct client* find_client_by_id(int client_id) {
     for (int i = 0; i < num_clients; i++) {
-        if (clients[i].pid == pid) {
+        if (clients[i].client_id == client_id) {
             return &clients[i];
         }
     }
     return NULL;
 }
 
-void forward_message(struct message msg, int sender_pid) {
+void forward_message(struct message msg, int sender_client_id) {
     for (int i = 0; i < num_clients; i++) {
-        if (clients[i].pid != sender_pid) {
+        if (clients[i].client_id != sender_client_id) {
             struct message forward_msg;
             forward_msg.mtype = clients[i].priority;
-            snprintf(forward_msg.mtext, MAX_TEXT_SIZE, "От клиента %d (PID %d): %s", 
-                    msg.client_id, sender_pid, msg.mtext);
+            snprintf(forward_msg.mtext, MAX_TEXT_SIZE, "От клиента %d: %s", 
+                    sender_client_id, msg.mtext);
             forward_msg.client_id = msg.client_id;
             
-            if (msgsnd(msgid, &forward_msg, sizeof(forward_msg.mtext), 0) == -1) {
+            if (msgsnd(msgid, &forward_msg, sizeof(forward_msg) - sizeof(long), 0) == -1) {
                 perror("msgsnd");
             } else {
                 printf("Сообщение переслано клиенту %d (Приоритет %d)\n", 
@@ -87,7 +93,7 @@ void handle_sigint(int sig) {
 int main() {
     key_t key;
     struct message msg;
-    int client_pid;
+    setbuf(stdout, NULL);
     
     key = ftok("/tmp", 'A');
     if (key == -1) {
@@ -101,13 +107,17 @@ int main() {
         exit(1);
     }
     
-    signal(SIGINT, handle_sigint);
+    struct sigaction sa;
+    sa.sa_handler = handle_sigint;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_RESTART;
+    sigaction(SIGINT, &sa, NULL);
     
     printf("Сервер запущен. ID очереди: %d\n", msgid);
     printf("Приоритет сервера: %d\n", SERVER_PRIORITY);
     
     while (running) {
-        if (msgrcv(msgid, &msg, MAX_TEXT_SIZE, 0, 0) == -1) {
+        if (msgrcv(msgid, &msg, sizeof(msg) - sizeof(long), SERVER_PRIORITY, 0) == -1) {
             if (errno == EINTR) {
                 continue;
             }
@@ -115,27 +125,25 @@ int main() {
             exit(1);
         }
         
-        client_pid = msg.mtype;
-        
         if (strncmp(msg.mtext, "REGISTER:", 9) == 0) {
-            int client_id, priority;
-            sscanf(msg.mtext, "REGISTER:%d:%d", &client_id, &priority);
-            add_client(client_pid, client_id, priority);
+            int client_id, priority, pid;
+            sscanf(msg.mtext, "REGISTER:%d:%d:%d", &client_id, &priority, &pid);
+            add_client(pid, client_id, priority);
             continue;
         }
         
         if (strcmp(msg.mtext, "SHUTDOWN") == 0) {
-            struct client* client = find_client(client_pid);
+            struct client* client = find_client_by_id(msg.client_id);
             if (client != NULL) {
                 printf("Получен запрос на завершение от клиента %d (PID %d)\n", 
-                       client->client_id, client_pid);
-                remove_client(client_pid);
+                       client->client_id, client->pid);
+                remove_client(client->pid);
             }
             continue;
         }
         
-        printf("Получено сообщение от PID %d: %s\n", client_pid, msg.mtext);
-        forward_message(msg, client_pid);
+        printf("Получено сообщение от клиента %d: %s\n", msg.client_id, msg.mtext);
+        forward_message(msg, msg.client_id);
     }
     
     msgctl(msgid, IPC_RMID, NULL);

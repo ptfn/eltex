@@ -2,7 +2,6 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/wait.h>
-#include <sys/types.h>
 #include <fcntl.h>
 #include <semaphore.h>
 #include <sys/stat.h>
@@ -11,133 +10,136 @@
 #include <errno.h>
 
 #define FILENAME "numbers.txt"
-#define SEM_NAME "/my_semaphore"
-#define MAX_NUMBERS 10
-#define MAX_VALUE 100
+#define SEM_NAME "/prod_cons_sem"
 
-void parent_process(sem_t *sem) {
-    printf("Родительский процесс: генерация случайных чисел...\n");
-    
+sem_t *sem;
+
+void parent_process() {
     int fd = open(FILENAME, O_WRONLY | O_CREAT | O_TRUNC, 0666);
     if (fd == -1) {
-        perror("Ошибка открытия файла");
-        exit(EXIT_FAILURE);
+        perror("open");
+        exit(1);
     }
-    
-    srand(time(NULL));
-    
-    for (int i = 0; i < MAX_NUMBERS; i++) {
-        int num = rand() % MAX_VALUE;
-        
+
+    srand(time(NULL) ^ (getpid() << 16));
+
+    for (int i = 0; i < 10; i++) {
+        int num_count = rand() % 10 + 1;
+        char line[256];
+        int pos = 0;
+        for (int j = 0; j < num_count; j++) {
+            pos += snprintf(line + pos, sizeof(line) - pos, "%d%c",
+                            rand() % 1000, " \n"[j == num_count - 1]);
+        }
+
         sem_wait(sem);
-        
-        char buffer[32];
-        int len = snprintf(buffer, sizeof(buffer), "%d\n", num);
-        write(fd, buffer, len);
-        
-        printf("Родитель: записано число %d\n", num);
-      
+        write(fd, line, strlen(line));
+        fsync(fd);
         sem_post(sem);
-        
+
+        printf("Parent wrote: %s", line);
         sleep(1);
     }
-    
+
+    const char *end_marker = "END\n";
+    sem_wait(sem);
+    write(fd, end_marker, strlen(end_marker));
+    fsync(fd);
+    sem_post(sem);
+
     close(fd);
-    printf("Родительский процесс завершил запись чисел.\n");
 }
 
-void child_process(sem_t *sem) {
-    printf("Дочерний процесс: анализ чисел...\n");
-    
+void child_process() {
     int fd = open(FILENAME, O_RDONLY);
     if (fd == -1) {
-        perror("Ошибка открытия файла");
-        exit(EXIT_FAILURE);
+        perror("open");
+        exit(1);
     }
-    
-    char buffer[32];
-    ssize_t bytes_read;
-    
-    while ((bytes_read = read(fd, buffer, sizeof(buffer) - 1)) > 0) {
-        buffer[bytes_read] = '\0';
-        
+
+    off_t offset = 0;
+    int done = 0;
+
+    while (!done) {
         sem_wait(sem);
-        
-        char *token = strtok(buffer, "\n");
-        while (token != NULL) {
-            int num = atoi(token);
-            if (num != 0) {
-                static int min = MAX_VALUE;
-                static int max = 0;
-                static int first_num = 1;
-                
-                if (first_num) {
-                    min = num;
-                    max = num;
-                    first_num = 0;
-                } else {
-                    if (num < min) min = num;
-                    if (num > max) max = num;
+
+        off_t end = lseek(fd, 0, SEEK_END);
+        if (end > offset) {
+            char buf[4096];
+            lseek(fd, offset, SEEK_SET);
+            ssize_t n = read(fd, buf, sizeof(buf) - 1);
+            if (n > 0) {
+                buf[n] = '\0';
+                offset = end;
+
+                char *line = buf;
+                while (line && *line) {
+                    char *nl = strchr(line, '\n');
+                    if (nl) *nl = '\0';
+
+                    long min = 999999, max = -1;
+                    char *p = line;
+                    while (*p) {
+                        while (*p == ' ') p++;
+                        if (*p == '\0') break;
+                        char *endp;
+                        long val = strtol(p, &endp, 10);
+                        if (endp != p) {
+                            if (val < min) min = val;
+                            if (val > max) max = val;
+                            p = endp;
+                        } else {
+                            p++;
+                        }
+                    }
+
+                    if (strcmp(line, "END") == 0) {
+                        done = 1;
+                        line = nl ? nl + 1 : NULL;
+                        break;
+                    }
+
+                    if (max >= 0) {
+                        printf("Child line: %s\n", line);
+                        printf("  Min: %ld, Max: %ld\n", min, max);
+                    }
+
+                    line = nl ? nl + 1 : NULL;
                 }
-                
-                printf("Дочерний: обработано число %d (текущий min: %d, max: %d)\n", 
-                       num, min, max);
             }
-            token = strtok(NULL, "\n");
         }
-        
+
         sem_post(sem);
-        
-        sleep(1);
+        usleep(500000);
     }
-    
+
     close(fd);
-    printf("Дочерний процесс завершил анализ.\n");
 }
 
 int main() {
-    sem_t *sem = sem_open(SEM_NAME, O_CREAT | O_EXCL, 0666, 1);
+    sem_unlink(SEM_NAME);
+    sem = sem_open(SEM_NAME, O_CREAT | O_EXCL, 0666, 1);
     if (sem == SEM_FAILED) {
-        if (errno == EEXIST) {
-            sem = sem_open(SEM_NAME, 0);
-            if (sem == SEM_FAILED) {
-                perror("Ошибка открытия семафора");
-                exit(EXIT_FAILURE);
-            }
-            printf("Семафор уже существовал, продолжаем работу.\n");
-        } else {
-            perror("Ошибка создания семафора");
-            exit(EXIT_FAILURE);
-        }
-    } else {
-        printf("Семафор успешно создан.\n");
+        perror("sem_open");
+        return 1;
     }
-    
+
+    setbuf(stdout, NULL);
+
     pid_t pid = fork();
-    
-    if (pid == -1) {
-        perror("Ошибка fork");
-        exit(EXIT_FAILURE);
+    if (pid < 0) {
+        perror("fork");
+        return 1;
     }
-    
+
     if (pid == 0) {
-        child_process(sem);
+        child_process();
     } else {
-        parent_process(sem);
-        
+        parent_process();
         wait(NULL);
-        
-        if (sem_unlink(SEM_NAME) == -1) {
-            perror("Ошибка удаления семафора");
-        } else {
-            printf("Семафор успешно удален.\n");
-        }
+        sem_unlink(SEM_NAME);
     }
-    
-    if (sem_close(sem) == -1) {
-        perror("Ошибка закрытия семафора");
-        exit(EXIT_FAILURE);
-    }
-    
+
+    sem_close(sem);
     return 0;
 }
