@@ -22,4 +22,4 @@
 
 ![Проверка mask в sysfs](screen/3.png)
 
-![Демонстрация работы](demo.gif)
+![Демонстрация работы](screen/demo.gif)
