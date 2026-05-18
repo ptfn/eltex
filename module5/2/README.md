@@ -1,7 +1,5 @@
 # Задание 2 — procfs модуль
 
-## Ошбика при сборке
-
 Взяли пример с `file_operations` (старый API для proc). На ядре 7.0.8 `proc_create` принимает `struct proc_ops`, а не `file_operations`. Сборка падает с ошибкой несовместимости типов.
 
 ![Ошибка сборки](screen/1.png)
