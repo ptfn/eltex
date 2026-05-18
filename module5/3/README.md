@@ -6,11 +6,7 @@
 
 ## Адаптация под новое ядро
 
-Заменили устаревший API на современный:
-- `init_timer` + прямая настройка полей → `timer_setup`
-- `void (*)(unsigned long)` → `void (*)(struct timer_list *)`
-- `del_timer` → `timer_delete_sync`
-- Все глобальные переменные сделали `static`
+Заменили устаревший API на современный: вместо `init_timer` с прямой настройкой полей использован `timer_setup`. Сигнатура callback изменена с `void (*)(unsigned long)` на `void (*)(struct timer_list *)`. `del_timer` заменен на `timer_delete_sync`. Все глобальные переменные сделаны `static`.
 
 Добавили sysfs с атрибутом `mask` в `/sys/kernel/kbleds/` для управления миганием.
 

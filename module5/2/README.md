@@ -6,11 +6,7 @@
 
 ## Адаптация под новое ядро
 
-Заменили `struct file_operations` на `struct proc_ops`, поля переименовали:
-- `.open` → `.proc_open`
-- `.release` → `.proc_release`
-- `.read` → `.proc_read`
-- `.write` → `.proc_write`
+Заменили `struct file_operations` на `struct proc_ops`. Поля переименованы: `.open` заменен на `.proc_open`, `.release` на `.proc_release`, `.read` на `.proc_read`, `.write` на `.proc_write`.
 
 После исправления модуль собрался без ошибок.
 
