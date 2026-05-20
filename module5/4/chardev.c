@@ -51,7 +51,15 @@ static ssize_t device_read(struct file *file, char __user *buffer,
 static ssize_t device_write(struct file *file, const char __user *buffer,
                             size_t length, loff_t *offset)
 {
-    return -EINVAL;
+    if (length > BUF_LEN - 1)
+        length = BUF_LEN - 1;
+
+    if (copy_from_user(msg, buffer, length))
+        return -EFAULT;
+
+    msg[length] = '\0';
+    *offset = 0;
+    return length;
 }
 
 static struct file_operations fops = {
@@ -69,7 +77,7 @@ static int __init chardev_init(void)
         return major;
     }
 
-    cls = class_create(THIS_MODULE, DEVICE_NAME);
+    cls = class_create(DEVICE_NAME);
     device_create(cls, NULL, MKDEV(major, 0), NULL, DEVICE_NAME);
     pr_info("Device created on /dev/%s\n", DEVICE_NAME);
     return 0;
