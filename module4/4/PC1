@@ -1,0 +1,29 @@
+=~=~=~=~=~=~=~=~=~=~=~= PuTTY log 2026.05.26 05:22:36 =~=~=~=~=~=~=~=~=~=~=~=
+show ip
+
+NAME        : PC1[1]
+IP/MASK     : 0.0.0.0/0
+GATEWAY     : 0.0.0.0
+DNS         : 
+MAC         : 00:50:79:66:68:00
+LPORT       : 20610
+RHOST:PORT  : 127.0.0.1:20611
+MTU         : 1500
+
+PC1> ip dhcp
+DDORA IP 192.168.10.2/24 GW 192.168.10.1
+
+PC1> show io[  p
+
+NAME        : PC1[1]
+IP/MASK     : 192.168.10.2/24
+GATEWAY     : 192.168.10.1
+DNS         : 
+DHCP SERVER : 10.0.0.2
+DHCP LEASE  : 86395, 86400/43200/75600
+MAC         : 00:50:79:66:68:00
+LPORT       : 20610
+RHOST:PORT  : 127.0.0.1:20611
+MTU         : 1500
+
+PC1> 
